@@ -93,22 +93,23 @@ app.post('/generate', async (req, res) => {
 
     // 3. ПОСЛЕ ЭТОГО, В ФОНОВОМ РЕЖИМЕ СОХРАНЯЕМ В БАЗУ.
     // Мы не используем `await` здесь, чтобы не задерживать ответ.
-    supabase
-      .from('conversations')
-      .insert([
-        { 
-          session_id: sessionId, 
-          user_prompt: prompt, 
-          bot_response: botResponseText 
-        }
-      ])
-      .then(({ error }) => {
-        // Эта часть выполнится позже. Если будет ошибка,
-        // мы просто запишем ее в лог на Vercel, не прерывая работу.
-        if (error) {
-          console.error('Supabase non-blocking insert error:', error.message);
-        }
-      });
+    // Конструкция `(async () => { ... })();` позволяет выполнить
+    // асинхронный код, не блокируя основной поток.
+    (async () => {
+      const { error } = await supabase
+        .from('conversations')
+        .insert([
+          { 
+            session_id: sessionId, 
+            user_prompt: prompt, 
+            bot_response: botResponseText 
+          }
+        ]);
+
+      if (error) {
+        console.error('Supabase non-blocking insert error:', error.message);
+      }
+    })();
 
   } catch (error) {
     console.error("Error in /generate endpoint:", error);
