@@ -1,0 +1,14 @@
+{
+  "name": "gemini-tilda-proxy",
+  "version": "1.0.0",
+  "description": "Proxy server for Gemini API on Tilda",
+  "main": "proxy-server.js",
+  "scripts": {
+    "start": "node proxy-server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@google/generative-ai": "^0.12.0",
+    "cors": "^2.8.5"
+  }
+}
