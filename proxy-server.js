@@ -1,17 +1,26 @@
 const express = require('express');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const cors = require('cors');
-// Клиент для Supabase
-const { createClient } = require('@supabase/supabase-js');
+// НОВАЯ ЗАВИСИМОСТЬ: Клиент для Google API
+const { google } = require('googleapis');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Инициализация клиента Supabase с помощью переменных окружения
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// --- БЛОК АУТЕНТИФИКАЦИИ GOOGLE ---
+const auth = new google.auth.GoogleAuth({
+  credentials: {
+    client_email: process.env.GOOGLE_CLIENT_EMAIL,
+    // Заменяем \n на реальные переносы строк для ключа
+    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  },
+  scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+});
+
+const sheets = google.sheets({ version: 'v4', auth });
+const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
+// ------------------------------------
 
 // Системный промпт для Gemini (оставляем без изменений)
 const systemPrompt = `
@@ -72,7 +81,7 @@ const systemPrompt = `
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-pro-preview-06-05",
+    model: "gemini-1.5-pro-latest",
     systemInstruction: systemPrompt,
 });
 
@@ -87,26 +96,28 @@ app.post('/generate', async (req, res) => {
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const botResponseText = response.text();
-
-    // Шаг 2: Немедленно отправляем ответ пользователю, чтобы он не ждал
+    
+    // Шаг 2: Немедленно отправляем ответ пользователю
     res.json({ text: botResponseText });
 
-    // Шаг 3: В фоновом режиме вызываем Edge-функцию для надежного сохранения
-    // Мы не используем `await` здесь, это "fire-and-forget" ("выстрелил и забыл")
-    supabase.functions.invoke('save-conversation', {
-        body: { 
-            session_id: sessionId, 
-            user_prompt: prompt, 
-            bot_response: botResponseText 
+    // Шаг 3: В фоновом режиме сохраняем диалог в Google Таблицу
+    (async () => {
+        try {
+            await sheets.spreadsheets.values.append({
+                spreadsheetId,
+                range: 'A1', // Начнется поиск с A1 и добавление в первую пустую строку
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [[sessionId, prompt, botResponseText]],
+                },
+            });
+        } catch (err) {
+            console.error('Error writing to Google Sheets:', err.message);
         }
-    }).catch(err => {
-        // Логируем ошибку, если сам вызов функции не удался
-        console.error("Error invoking Supabase function:", err.message);
-    });
+    })();
 
   } catch (error) {
     console.error("Error in /generate endpoint:", error);
-    // Отправляем ответ об ошибке, только если он не был отправлен ранее
     if (!res.headersSent) {
       res.status(500).json({ error: 'Internal Server Error' });
     }
