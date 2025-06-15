@@ -72,7 +72,7 @@ const systemPrompt = `
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-pro-latest", // Используем стабильную модель
+    model: "gemini-2.5-flash-preview-05-20", // Используем стабильную модель
     systemInstruction: systemPrompt,
 });
 
