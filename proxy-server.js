@@ -72,36 +72,28 @@ const systemPrompt = `
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash-preview-05-20",
+    model: "gemini-1.5-pro-latest", // Используем стабильную модель
     systemInstruction: systemPrompt,
 });
 
 app.post('/generate', async (req, res) => {
   try {
-    // Теперь мы принимаем не только промпт, но и ID сессии
     const { prompt, sessionId } = req.body;
     if (!prompt || !sessionId) {
       return res.status(400).json({ error: 'Prompt and Session ID are required' });
     }
 
-    // 1. Получаем ответ от Gemini (как и раньше)
+    // 1. Получаем ответ от Gemini
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const botResponseText = response.text();
-    
 
-    // 3. Отправляем ответ пользователю (как и раньше)
+    // 2. НЕМЕДЛЕННО ОТПРАВЛЯЕМ ОТВЕТ ПОЛЬЗОВАТЕЛЮ
     res.json({ text: botResponseText });
 
-  } catch (error) {
-    console.error("Error in /generate endpoint:", error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-
-  // 2. АВТОМАТИЧЕСКИ СОХРАНЯЕМ ДИАЛОГ В БАЗУ ДАННЫХ
-    //const { error } = await supabase
+    // 3. ПОСЛЕ ЭТОГО, В ФОНОВОМ РЕЖИМЕ СОХРАНЯЕМ В БАЗУ.
+    // Мы не используем `await` здесь, чтобы не задерживать ответ.
+    supabase
       .from('conversations')
       .insert([
         { 
@@ -109,11 +101,22 @@ app.post('/generate', async (req, res) => {
           user_prompt: prompt, 
           bot_response: botResponseText 
         }
-      ]);
+      ])
+      .then(({ error }) => {
+        // Эта часть выполнится позже. Если будет ошибка,
+        // мы просто запишем ее в лог на Vercel, не прерывая работу.
+        if (error) {
+          console.error('Supabase non-blocking insert error:', error.message);
+        }
+      });
 
-    if (error) {
-      // Если произошла ошибка записи в базу, мы ее логируем, но не останавливаем ответ пользователю
-      console.error('Supabase insert error:', error.message);
+  } catch (error) {
+    console.error("Error in /generate endpoint:", error);
+    // Отправляем ответ об ошибке, только если он не был отправлен ранее
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal Server Error' });
     }
+  }
+});
 
 module.exports = app;
