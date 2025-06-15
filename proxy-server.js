@@ -88,9 +88,20 @@ app.post('/generate', async (req, res) => {
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const botResponseText = response.text();
+    
 
-    // 2. АВТОМАТИЧЕСКИ СОХРАНЯЕМ ДИАЛОГ В БАЗУ ДАННЫХ
-    const { error } = await supabase
+    // 3. Отправляем ответ пользователю (как и раньше)
+    res.json({ text: botResponseText });
+
+  } catch (error) {
+    console.error("Error in /generate endpoint:", error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+
+  // 2. АВТОМАТИЧЕСКИ СОХРАНЯЕМ ДИАЛОГ В БАЗУ ДАННЫХ
+    //const { error } = await supabase
       .from('conversations')
       .insert([
         { 
@@ -104,14 +115,5 @@ app.post('/generate', async (req, res) => {
       // Если произошла ошибка записи в базу, мы ее логируем, но не останавливаем ответ пользователю
       console.error('Supabase insert error:', error.message);
     }
-
-    // 3. Отправляем ответ пользователю (как и раньше)
-    res.json({ text: botResponseText });
-
-  } catch (error) {
-    console.error("Error in /generate endpoint:", error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
 
 module.exports = app;
