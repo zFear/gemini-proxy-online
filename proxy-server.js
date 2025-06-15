@@ -1,7 +1,7 @@
 const express = require('express');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const cors = require('cors');
-// НОВАЯ ЗАВИСИМОСТЬ: Клиент для Supabase
+// Клиент для Supabase
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
@@ -72,7 +72,7 @@ const systemPrompt = `
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash-preview-05-20", // Используем стабильную модель
+    model: "gemini-1.5-pro-latest",
     systemInstruction: systemPrompt,
 });
 
@@ -83,33 +83,26 @@ app.post('/generate', async (req, res) => {
       return res.status(400).json({ error: 'Prompt and Session ID are required' });
     }
 
-    // 1. Получаем ответ от Gemini
+    // Шаг 1: Получаем ответ от Gemini
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const botResponseText = response.text();
 
-    // 2. НЕМЕДЛЕННО ОТПРАВЛЯЕМ ОТВЕТ ПОЛЬЗОВАТЕЛЮ
+    // Шаг 2: Немедленно отправляем ответ пользователю, чтобы он не ждал
     res.json({ text: botResponseText });
 
-    // 3. ПОСЛЕ ЭТОГО, В ФОНОВОМ РЕЖИМЕ СОХРАНЯЕМ В БАЗУ.
-    // Мы не используем `await` здесь, чтобы не задерживать ответ.
-    // Конструкция `(async () => { ... })();` позволяет выполнить
-    // асинхронный код, не блокируя основной поток.
-    (async () => {
-      const { error } = await supabase
-        .from('conversations')
-        .insert([
-          { 
+    // Шаг 3: В фоновом режиме вызываем Edge-функцию для надежного сохранения
+    // Мы не используем `await` здесь, это "fire-and-forget" ("выстрелил и забыл")
+    supabase.functions.invoke('save-conversation', {
+        body: { 
             session_id: sessionId, 
             user_prompt: prompt, 
             bot_response: botResponseText 
-          }
-        ]);
-
-      if (error) {
-        console.error('Supabase non-blocking insert error:', error.message);
-      }
-    })();
+        }
+    }).catch(err => {
+        // Логируем ошибку, если сам вызов функции не удался
+        console.error("Error invoking Supabase function:", err.message);
+    });
 
   } catch (error) {
     console.error("Error in /generate endpoint:", error);
