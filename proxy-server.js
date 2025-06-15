@@ -1,12 +1,19 @@
 const express = require('express');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const cors = require('cors');
+// НОВАЯ ЗАВИСИМОСТЬ: Клиент для Supabase
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Обновленный системный промпт с вашими строгими инструкциями и Markdown-форматированием
+// Инициализация клиента Supabase с помощью переменных окружения
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Системный промпт для Gemini (оставляем без изменений)
 const systemPrompt = `
 [НАЧАЛО ПРОМПТА]
 1. РОЛЬ И ГЛАВНАЯ ЦЕЛЬ
@@ -64,22 +71,43 @@ const systemPrompt = `
 `;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
 const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-pro-preview-06-05",
+    model: "gemini-1.5-pro-latest",
     systemInstruction: systemPrompt,
 });
 
 app.post('/generate', async (req, res) => {
   try {
-    const { prompt } = req.body;
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt is required' });
+    // Теперь мы принимаем не только промпт, но и ID сессии
+    const { prompt, sessionId } = req.body;
+    if (!prompt || !sessionId) {
+      return res.status(400).json({ error: 'Prompt and Session ID are required' });
     }
+
+    // 1. Получаем ответ от Gemini (как и раньше)
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    const text = response.text();
-    res.json({ text });
+    const botResponseText = response.text();
+
+    // 2. АВТОМАТИЧЕСКИ СОХРАНЯЕМ ДИАЛОГ В БАЗУ ДАННЫХ
+    const { error } = await supabase
+      .from('conversations')
+      .insert([
+        { 
+          session_id: sessionId, 
+          user_prompt: prompt, 
+          bot_response: botResponseText 
+        }
+      ]);
+
+    if (error) {
+      // Если произошла ошибка записи в базу, мы ее логируем, но не останавливаем ответ пользователю
+      console.error('Supabase insert error:', error.message);
+    }
+
+    // 3. Отправляем ответ пользователю (как и раньше)
+    res.json({ text: botResponseText });
+
   } catch (error) {
     console.error("Error in /generate endpoint:", error);
     res.status(500).json({ error: 'Internal Server Error' });
