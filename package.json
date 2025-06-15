@@ -1,7 +1,7 @@
 {
-  "name": "gemini-tilda-proxy",
+  "name": "gemini-google-sheets-proxy",
   "version": "1.0.0",
-  "description": "Proxy server for Gemini API with Supabase logging",
+  "description": "Proxy server for Gemini API with Google Sheets logging",
   "main": "proxy-server.js",
   "scripts": {
     "start": "node proxy-server.js"
@@ -10,6 +10,6 @@
     "express": "^4.19.2",
     "@google/generative-ai": "^0.12.0",
     "cors": "^2.8.5",
-    "@supabase/supabase-js": "^2.43.4"
+    "googleapis": "^140.0.0"
   }
 }
