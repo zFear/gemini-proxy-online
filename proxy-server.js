@@ -6,10 +6,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- НАЧАЛО: НОВАЯ СИСТЕМНАЯ ИНСТРУКЦИЯ ---
-
-// Весь ваш подробный промпт мы помещаем в одну константу.
-// Используем обратные кавычки (`) для удобной работы с многострочным текстом.
 const systemPrompt = `
 [НАЧАЛО ПРОМПТА]
 1. РОЛЬ И ГЛАВНАЯ ЦЕЛЬ
@@ -64,18 +60,12 @@ const systemPrompt = `
 [КОНЕЦ ПРОМПТА]
 `;
 
-// --- КОНЕЦ: НОВАЯ СИСТЕМНАЯ ИНСТРУКЦИЯ ---
-
-
-// Инициализация клиента с помощью ключа из настроек Vercel
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Здесь мы передаем системную инструкцию в модель при ее создании
 const model = genAI.getGenerativeModel({
     model: "gemini-1.5-flash",
     systemInstruction: systemPrompt,
 });
-
 
 app.post('/generate', async (req, res) => {
   try {
@@ -83,23 +73,15 @@ app.post('/generate', async (req, res) => {
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' });
     }
-
-    // Теперь мы отправляем только сам вопрос пользователя, 
-    // так как модель уже "знает" свою роль из системной инструкции.
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
-
     res.json({ text });
-
   } catch (error) {
     console.error("Error in /generate endpoint:", error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
+// ЭТО ДОЛЖНА БЫТЬ ПОСЛЕДНЯЯ СТРОКА В ФАЙЛЕ
 module.exports = app;
-
-app.listen(port, () => {
-  console.log(`Proxy server listening on port ${port}`);
-});
