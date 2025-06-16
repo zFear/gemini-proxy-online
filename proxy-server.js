@@ -1,14 +1,14 @@
 const express = require('express');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const cors = require('cors');
-// Зависимость для работы с Google API
+// НОВАЯ ЗАВИСИМОСТЬ: Клиент для Google API
 const { google } = require('googleapis');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- БЛОК АУТЕНТИФИКАЦИИ GOOGLE ДЛЯ ТАБЛИЦ ---
+// --- БЛОК АУТЕНТИФИКАЦИИ GOOGLE ---
 const auth = new google.auth.GoogleAuth({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -80,20 +80,10 @@ const systemPrompt = `
 `;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-const generationConfig = {
-    temperature: 0,
-};
-
-// Инициализация модели с ИСПРАВЛЕННЫМ инструментом Google Search
 const model = genAI.getGenerativeModel({
     model: "gemini-2.5-pro-preview-06-05",
     systemInstruction: systemPrompt,
-    // ИЗМЕНЕНИЕ ЗДЕСЬ: Используем правильное название инструмента
-    tools: [{ "google_search_retrieval": {} }],
-    generationConfig: generationConfig, 
 });
-
 
 app.post('/generate', async (req, res) => {
   try {
@@ -102,24 +92,29 @@ app.post('/generate', async (req, res) => {
       return res.status(400).json({ error: 'Prompt and Session ID are required' });
     }
 
+    // Шаг 1: Получаем ответ от Gemini
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const botResponseText = response.text();
-
-    try {
-        await sheets.spreadsheets.values.append({
-            spreadsheetId,
-            range: 'A1',
-            valueInputOption: 'USER_ENTERED',
-            resource: {
-                values: [[sessionId, prompt, botResponseText]],
-            },
-        });
-    } catch (err) {
-        console.error('Error writing to Google Sheets:', err.message);
-    }
     
+    // Шаг 2: Немедленно отправляем ответ пользователю
     res.json({ text: botResponseText });
+
+    // Шаг 3: В фоновом режиме сохраняем диалог в Google Таблицу
+    (async () => {
+        try {
+            await sheets.spreadsheets.values.append({
+                spreadsheetId,
+                range: 'A1', // Начнется поиск с A1 и добавление в первую пустую строку
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [[sessionId, prompt, botResponseText]],
+                },
+            });
+        } catch (err) {
+            console.error('Error writing to Google Sheets:', err.message);
+        }
+    })();
 
   } catch (error) {
     console.error("Error in /generate endpoint:", error);
