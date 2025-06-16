@@ -84,7 +84,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 // --- ИЗМЕНЕНИЯ ЗДЕСЬ ---
 const generationConfig = {
     // Устанавливаем температуру на 0 для получения максимально детерминированных и фактических ответов.
-    temperature: 300,
+    temperature: 0,
 };
 
 // Инициализация модели с Gemini 1.5 Pro и Google Search
