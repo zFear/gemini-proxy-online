@@ -81,16 +81,21 @@ const systemPrompt = `
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// --- ИЗМЕНЕНИЯ ЗДЕСЬ ---
 const generationConfig = {
+    // Устанавливаем температуру на 0 для получения максимально детерминированных и фактических ответов.
     temperature: 0,
 };
 
+// Инициализация модели с новыми настройками и инструментом Google Search
 const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash-preview-05-20",
+    model: "gemini-1.5-pro-latest", // Рекомендуется использовать стабильную модель для работы с инструментами
     systemInstruction: systemPrompt,
-    generationConfig: generationConfig, 
-    tools: [{ "googleSearch": {} }],
+    generationConfig: generationConfig, // Применяем нулевую температуру
+    // Включаем инструмент поиска Google
+    tools: [{ "googleSearchRetrieval": {} }],
 });
+// -----------------------
 
 
 app.post('/generate', async (req, res) => {
@@ -105,24 +110,22 @@ app.post('/generate', async (req, res) => {
     const response = await result.response;
     const botResponseText = response.text();
 
-    // Шаг 2: Немедленно отправляем ответ пользователю, чтобы он не ждал
-    res.json({ text: botResponseText });
+    // Шаг 2: Надежно сохраняем диалог в Google Таблицу
+    try {
+        await sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: 'A1',
+            valueInputOption: 'USER_ENTERED',
+            resource: {
+                values: [[sessionId, prompt, botResponseText]],
+            },
+        });
+    } catch (err) {
+        console.error('Error writing to Google Sheets:', err.message);
+    }
     
-    // Шаг 3: В фоновом режиме ("fire-and-forget") сохраняем диалог в Google Таблицу.
-    // Этот метод не гарантирует 100% запись при высокой нагрузке на Vercel,
-    // но он решает проблему с таймаутом.
-    sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: 'A1',
-        valueInputOption: 'USER_ENTERED',
-        resource: {
-            values: [[sessionId, prompt, botResponseText]],
-        },
-    }).catch(err => {
-        // Если при фоновой записи произойдет ошибка, мы просто запишем ее в лог,
-        // не влияя на уже отправленный пользователю ответ.
-        console.error('Error writing to Google Sheets in background:', err.message);
-    });
+    // Шаг 3: Отправляем ответ пользователю
+    res.json({ text: botResponseText });
 
   } catch (error) {
     console.error("Error in /generate endpoint:", error);
