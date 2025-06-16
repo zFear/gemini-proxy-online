@@ -1,14 +1,14 @@
 const express = require('express');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const cors = require('cors');
-// НОВАЯ ЗАВИСИМОСТЬ: Клиент для Google API
+// Зависимость для работы с Google API
 const { google } = require('googleapis');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- БЛОК АУТЕНТИФИКАЦИИ GOOGLE ---
+// --- БЛОК АУТЕНТИФИКАЦИИ GOOGLE ДЛЯ ТАБЛИЦ ---
 const auth = new google.auth.GoogleAuth({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -80,9 +80,12 @@ const systemPrompt = `
 `;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Инициализация модели с инструментом Google Search
 const model = genAI.getGenerativeModel({
     model: "gemini-2.5-pro-preview-06-05",
     systemInstruction: systemPrompt,
+    tools: [{ googleSearch: {} }],
 });
 
 app.post('/generate', async (req, res) => {
@@ -96,28 +99,28 @@ app.post('/generate', async (req, res) => {
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const botResponseText = response.text();
-    
-    // Шаг 2: Немедленно отправляем ответ пользователю
-    res.json({ text: botResponseText });
 
-    // Шаг 3: В фоновом режиме сохраняем диалог в Google Таблицу
-    (async () => {
-        try {
-            await sheets.spreadsheets.values.append({
-                spreadsheetId,
-                range: 'A1', // Начнется поиск с A1 и добавление в первую пустую строку
-                valueInputOption: 'USER_ENTERED',
-                resource: {
-                    values: [[sessionId, prompt, botResponseText]],
-                },
-            });
-        } catch (err) {
-            console.error('Error writing to Google Sheets:', err.message);
-        }
-    })();
+    // Шаг 2: Надежно сохраняем диалог в Google Таблицу
+    try {
+        await sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: 'A1', // Начнется поиск с A1 и добавление в первую пустую строку
+            valueInputOption: 'USER_ENTERED',
+            resource: {
+                values: [[sessionId, prompt, botResponseText]],
+            },
+        });
+    } catch (err) {
+        // Логируем ошибку, но не прерываем ответ пользователю
+        console.error('Error writing to Google Sheets:', err.message);
+    }
+    
+    // Шаг 3: Отправляем ответ пользователю
+    res.json({ text: botResponseText });
 
   } catch (error) {
     console.error("Error in /generate endpoint:", error);
+    // Отправляем ответ об ошибке, только если он не был отправлен ранее
     if (!res.headersSent) {
       res.status(500).json({ error: 'Internal Server Error' });
     }
