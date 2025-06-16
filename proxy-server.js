@@ -81,7 +81,6 @@ const systemPrompt = `
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// --- ИЗМЕНЕНИЯ ЗДЕСЬ: Новая конфигурация на основе вашего примера ---
 const generationConfig = {
     temperature: 0,
 };
@@ -112,7 +111,6 @@ const model = genAI.getGenerativeModel({
     safetySettings: safetySettings,
     tools: [{ googleSearch: {} }], // Используем синтаксис для Gemini 2.0
 });
-// --------------------------------------------------------------------
 
 app.post('/generate', async (req, res) => {
   try {
@@ -125,23 +123,26 @@ app.post('/generate', async (req, res) => {
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const botResponseText = response.text();
-
-    // Шаг 2: Надежно сохраняем диалог в Google Таблицу
-    try {
-        await sheets.spreadsheets.values.append({
-            spreadsheetId,
-            range: 'A1',
-            valueInputOption: 'USER_ENTERED',
-            resource: {
-                values: [[sessionId, prompt, botResponseText]],
-            },
-        });
-    } catch (err) {
-        console.error('Error writing to Google Sheets:', err.message);
-    }
     
-    // Шаг 3: Отправляем ответ пользователю
+    // --- ИЗМЕНЕНИЕ: Логика "Сначала ответ, потом сохранение" ---
+    // Шаг 2: Немедленно отправляем ответ пользователю, чтобы он не ждал
     res.json({ text: botResponseText });
+
+    // Шаг 3: В фоновом режиме ("fire-and-forget") сохраняем диалог в Google Таблицу.
+    // Это решает проблему с таймаутом, но не гарантирует 100% запись при высокой нагрузке.
+    sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: 'A1', // Google Sheets найдет первую пустую строку
+        valueInputOption: 'USER_ENTERED',
+        resource: {
+            values: [[sessionId, prompt, botResponseText]],
+        },
+    }).catch(err => {
+        // Если при фоновой записи произойдет ошибка, мы просто запишем ее в лог,
+        // не влияя на уже отправленный пользователю ответ.
+        console.error('Error writing to Google Sheets in background:', err.message);
+    });
+    // -----------------------------------------------------------
 
   } catch (error) {
     console.error("Error in /generate endpoint:", error);
