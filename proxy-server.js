@@ -81,12 +81,22 @@ const systemPrompt = `
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Инициализация модели с инструментом Google Search
+// --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
+// Добавлен объект конфигурации генерации
+const generationConfig = {
+    // Устанавливаем температуру на 0 для получения максимально детерминированных и фактических ответов.
+    // Это минимизирует "творчество" и "фантазии" модели.
+    temperature: 0,
+};
+
+// Инициализация модели с инструментом Google Search и новыми настройками
 const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-pro-preview-06-05",
+    model: "gemini-1.5-pro-latest", // Используем последнюю стабильную модель
     systemInstruction: systemPrompt,
     tools: [{ googleSearch: {} }],
+    generationConfig: generationConfig, // Применяем настройки
 });
+// -----------------------
 
 app.post('/generate', async (req, res) => {
   try {
