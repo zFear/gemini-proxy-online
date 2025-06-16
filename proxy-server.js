@@ -89,7 +89,7 @@ const generationConfig = {
 
 // Инициализация модели с новыми настройками и инструментом Google Search
 const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash", // ИЗМЕНЕНИЕ 1: Используем новую модель Gemini 2.0
+    model: "gemini-2.5-pro-preview-06-05", // ИЗМЕНЕНИЕ 1: Используем новую модель Gemini 2.0
     systemInstruction: systemPrompt,
     generationConfig: generationConfig, 
     // ИЗМЕНЕНИЕ 2: Используем новый синтаксис для включения поиска
