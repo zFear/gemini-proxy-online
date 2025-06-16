@@ -8,7 +8,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- БЛОК АУТЕНТИФИКАЦИИ GOOGLE ---
+// --- БЛОК АУТЕНТИФИКАЦИИ вавававпвпвпвапапкпGOOGLE ---
 const auth = new google.auth.GoogleAuth({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
