@@ -1,5 +1,5 @@
 const express = require('express');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
 const cors = require('cors');
 // Зависимость для работы с Google API
 const { google } = require('googleapis');
@@ -81,22 +81,38 @@ const systemPrompt = `
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// --- ИЗМЕНЕНИЯ ЗДЕСЬ ---
+// --- ИЗМЕНЕНИЯ ЗДЕСЬ: Новая конфигурация на основе вашего примера ---
 const generationConfig = {
-    // Устанавливаем температуру на 0 для получения максимально детерминированных и фактических ответов.
     temperature: 0,
 };
 
-// Инициализация модели с новыми настройками и инструментом Google Search
-const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-pro-latest", // Рекомендуется использовать стабильную модель для работы с инструментами
-    systemInstruction: systemPrompt,
-    generationConfig: generationConfig, // Применяем нулевую температуру
-    // Включаем инструмент поиска Google
-    tools: [{ "googleSearchRetrieval": {} }],
-});
-// -----------------------
+const safetySettings = [
+    {
+        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+        threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    },
+    {
+        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    },
+    {
+        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    },
+    {
+        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    },
+];
 
+const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-pro-preview-06-05", // Модель из вашего примера
+    systemInstruction: systemPrompt,
+    generationConfig: generationConfig,
+    safetySettings: safetySettings,
+    tools: [{ googleSearch: {} }], // Используем синтаксис для Gemini 2.0
+});
+// --------------------------------------------------------------------
 
 app.post('/generate', async (req, res) => {
   try {
