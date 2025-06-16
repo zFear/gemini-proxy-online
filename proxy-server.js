@@ -87,7 +87,7 @@ const generationConfig = {
 
 // Инициализация модели с ИСПРАВЛЕННЫМ инструментом Google Search
 const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-pro-latest",
+    model: "gemini-2.5-pro-preview-06-05",
     systemInstruction: systemPrompt,
     // ИЗМЕНЕНИЕ ЗДЕСЬ: Используем правильное название инструмента
     tools: [{ "google_search_retrieval": {} }],
