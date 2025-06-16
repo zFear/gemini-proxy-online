@@ -1,14 +1,14 @@
 const express = require('express');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const cors = require('cors');
-// НОВАЯ ЗАВИСИМОСТЬ: Клиент для Google API
+// Зависимость для работы с Google API
 const { google } = require('googleapis');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- БЛОК АУТЕНТИФИКАЦИИ вавававпвпвпвапапкпGOOGLE ---
+// --- БЛОК АУТЕНТИФИКАЦИИ GOOGLE ДЛЯ ТАБЛИЦ ---
 const auth = new google.auth.GoogleAuth({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -87,12 +87,13 @@ const generationConfig = {
     temperature: 0,
 };
 
-// Инициализация модели с новыми настройками, без Google Search
+// Инициализация модели с новыми настройками и инструментом Google Search
 const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-pro-preview-06-05", // Модель оставлена по вашему требованию
+    model: "gemini-1.5-pro-latest", // Рекомендуется использовать стабильную модель для работы с инструментами
     systemInstruction: systemPrompt,
     generationConfig: generationConfig, // Применяем нулевую температуру
-    // Инструмент tools удален
+    // Включаем инструмент поиска Google
+    tools: [{ "googleSearchRetrieval": {} }],
 });
 // -----------------------
 
