@@ -80,10 +80,22 @@ const systemPrompt = `
 `;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// --- ИЗМЕНЕНИЯ ЗДЕСЬ ---
+const generationConfig = {
+    // Устанавливаем температуру на 0 для получения максимально детерминированных и фактических ответов.
+    temperature: 0,
+};
+
+// Инициализация модели с новыми настройками, без Google Search
 const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-pro-preview-06-05",
+    model: "gemini-2.5-pro-preview-06-05", // Модель оставлена по вашему требованию
     systemInstruction: systemPrompt,
+    generationConfig: generationConfig, // Применяем нулевую температуру
+    // Инструмент tools удален
 });
+// -----------------------
+
 
 app.post('/generate', async (req, res) => {
   try {
@@ -96,25 +108,23 @@ app.post('/generate', async (req, res) => {
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const botResponseText = response.text();
-    
-    // Шаг 2: Немедленно отправляем ответ пользователю
-    res.json({ text: botResponseText });
 
-    // Шаг 3: В фоновом режиме сохраняем диалог в Google Таблицу
-    (async () => {
-        try {
-            await sheets.spreadsheets.values.append({
-                spreadsheetId,
-                range: 'A1', // Начнется поиск с A1 и добавление в первую пустую строку
-                valueInputOption: 'USER_ENTERED',
-                resource: {
-                    values: [[sessionId, prompt, botResponseText]],
-                },
-            });
-        } catch (err) {
-            console.error('Error writing to Google Sheets:', err.message);
-        }
-    })();
+    // Шаг 2: Надежно сохраняем диалог в Google Таблицу
+    try {
+        await sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: 'A1',
+            valueInputOption: 'USER_ENTERED',
+            resource: {
+                values: [[sessionId, prompt, botResponseText]],
+            },
+        });
+    } catch (err) {
+        console.error('Error writing to Google Sheets:', err.message);
+    }
+    
+    // Шаг 3: Отправляем ответ пользователю
+    res.json({ text: botResponseText });
 
   } catch (error) {
     console.error("Error in /generate endpoint:", error);
@@ -125,4 +135,5 @@ app.post('/generate', async (req, res) => {
 });
 
 module.exports = app;
+
 
