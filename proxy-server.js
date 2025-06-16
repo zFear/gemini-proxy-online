@@ -91,7 +91,7 @@ const generationConfig = {
 
 // Инициализация модели с инструментом Google Search и новыми настройками
 const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-pro-latest", // Используем последнюю стабильную модель
+    model: "gemini-2.5-pro-preview-06-05", // Используем последнюю стабильную модель
     systemInstruction: systemPrompt,
     tools: [{ googleSearch: {} }],
     generationConfig: generationConfig, // Применяем настройки
