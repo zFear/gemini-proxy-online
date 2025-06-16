@@ -93,7 +93,7 @@ const model = genAI.getGenerativeModel({
     systemInstruction: systemPrompt,
     generationConfig: generationConfig, // Применяем нулевую температуру
     // Включаем инструмент поиска Google
-    tools: [{ "googleSearchRetrieval": {} }],
+    tools: [{ "googleSearch": {} }],
 });
 // -----------------------
 
