@@ -74,8 +74,8 @@ const model = genAI.getGenerativeModel({
     model: "gemini-1.5-pro-latest",
     systemInstruction: systemPrompt,
     generationConfig: generationConfig,
-    // ИСПРАВЛЕНО: google_search заменен на googleSearch
-    tools: [{ "googleSearch": {} }], 
+    // ИСПРАВЛЕНО: googleSearch заменен на google_search_retrieval согласно сообщению об ошибке.
+    tools: [{ "google_search_retrieval": {} }], 
 });
 
 
@@ -133,5 +133,3 @@ app.post('/generate', async (req, res) => {
 
 
 module.exports = app;
-
-
