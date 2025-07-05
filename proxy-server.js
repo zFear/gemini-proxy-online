@@ -82,7 +82,7 @@ const model = genAI.getGenerativeModel({
 app.post('/generate-dictionaries', async (req, res) => {
   try {
     const { my_site_url, competitor_urls, sessionId } = req.body;
-    
+
     if (!my_site_url || !sessionId) {
       return res.status(400).json({ error: 'URL сайта компании и Session ID обязательны' });
     }
@@ -95,42 +95,54 @@ app.post('/generate-dictionaries', async (req, res) => {
 
     const result = await model.generateContent(userPrompt);
     const response = await result.response;
+
     let botResponseText = response.text();
 
-    // 🧼 Удаляем Markdown-обрамление
-    botResponseText = botResponseText
-      .replace(/^```(?:json)?\s*/i, '')  // удаляет начало ``` или ```json
-      .replace(/\s*```$/i, '')          // удаляет конец ```
-      .trim();
-
-    // Обеспечиваем, что это строка
-    if (typeof botResponseText !== 'string') {
-      botResponseText = JSON.stringify(botResponseText);
+    // Удаляем Markdown-обёртку, если она есть
+    if (typeof botResponseText === 'string') {
+      botResponseText = botResponseText
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
     }
 
-
-
-    
+    // Пишем в Google Sheets
     try {
-        await sheets.spreadsheets.values.append({
-            spreadsheetId,
-            range: 'A1',
-            valueInputOption: 'USER_ENTERED',
-            resource: {
-                values: [[sessionId, userPrompt, botResponseText]],
-            },
-        });
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: 'A1',
+        valueInputOption: 'USER_ENTERED',
+        resource: {
+          values: [[sessionId, userPrompt, typeof botResponseText === 'string' ? botResponseText : JSON.stringify(botResponseText)]],
+        },
+      });
     } catch (err) {
-        console.error('Error writing to Google Sheets:', err.message);
+      console.error('Error writing to Google Sheets:', err.message);
     }
-    
-    try {
-        const parsedResponse = JSON.parse(botResponseText);
-        res.json(parsedResponse);
-    } catch (parseError) {
+
+    // Универсальный разбор: строка → JSON.parse, объект → сразу отдаём
+    let parsedResponse;
+
+    if (typeof botResponseText === 'string') {
+      try {
+        parsedResponse = JSON.parse(botResponseText);
+      } catch (e) {
         console.error("Failed to parse Gemini response as JSON:", botResponseText);
-        res.status(500).json({ error: 'AI response was not valid JSON', raw_response: botResponseText });
+        return res.status(500).json({
+          error: 'AI response was not valid JSON',
+          raw_response: botResponseText,
+        });
+      }
+    } else if (typeof botResponseText === 'object') {
+      parsedResponse = botResponseText;
+    } else {
+      return res.status(500).json({
+        error: 'Unexpected response type from Gemini',
+        type: typeof botResponseText,
+      });
     }
+
+    return res.json(parsedResponse);
 
   } catch (error) {
     console.error("Error in /generate-dictionaries endpoint:", error);
