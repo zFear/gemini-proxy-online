@@ -20,9 +20,9 @@ const sheets = google.sheets({ version: 'v4', auth });
 const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
 // ------------------------------------
 
-// --- НОВЫЙ СИСТЕМНЫЙ ПРОМПТ ДЛЯ АНАЛИЗА САЙТОВ ---
+// --- СИСТЕМНЫЙ ПРОМПТ ДЛЯ АНАЛИЗА САЙТОВ (без изменений) ---
 const systemPrompt = `
-Ты — AI-аналитик, специализирующийся на бизнес-анализе и семантическом ядре.
+Ты — AI-аналитик, специализирующийся на бизнес-анализе и семантическом ядре для строительной отрасли.
 Твоя задача — на основе предоставленных URL-адресов провести глубокий анализ сайтов компании и ее конкурентов, чтобы создать набор словарей для системы речевой аналитики.
 
 **Твой алгоритм действий:**
@@ -66,15 +66,16 @@ const systemPrompt = `
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const generationConfig = {
-    temperature: 0.1, // Немного повышаем креативность для лучшего анализа
+    temperature: 0.1,
 };
 
 // --- ИНИЦИАЛИЗАЦИЯ МОДЕЛИ С ИНСТРУМЕНТАМИ ---
 const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-pro-latest", // Используем мощную модель для анализа
+    model: "gemini-1.5-pro-latest",
     systemInstruction: systemPrompt,
     generationConfig: generationConfig,
-    tools: [{ "google_search": {} }], // <-- ВКЛЮЧАЕМ ИНСТРУМЕНТ ДЛЯ ДОСТУПА К ВЕБУ
+    // ИСПРАВЛЕНО: google_search заменен на googleSearch
+    tools: [{ "googleSearch": {} }], 
 });
 
 
@@ -86,18 +87,16 @@ app.post('/generate-dictionaries', async (req, res) => {
       return res.status(400).json({ error: 'URL сайта компании и Session ID обязательны' });
     }
 
-    // --- ФОРМИРУЕМ ЗАПРОС ДЛЯ GEMINI ---
     const userPrompt = `
       Проанализируй следующие сайты и создай для них словари.
       - Сайт моей компании: ${my_site_url}
-      - Сайты конкурентов: ${competitor_urls.join(', ')}
+      - Сайты конкурентов: ${(competitor_urls || []).join(', ')}
     `;
 
     const result = await model.generateContent(userPrompt);
     const response = await result.response;
     const botResponseText = response.text();
 
-    // Запись в Google Sheets (без изменений)
     try {
         await sheets.spreadsheets.values.append({
             spreadsheetId,
@@ -111,13 +110,11 @@ app.post('/generate-dictionaries', async (req, res) => {
         console.error('Error writing to Google Sheets:', err.message);
     }
     
-    // Пытаемся распарсить JSON из ответа
     try {
         const parsedResponse = JSON.parse(botResponseText);
         res.json(parsedResponse);
     } catch (parseError) {
         console.error("Failed to parse Gemini response as JSON:", botResponseText);
-        // Если парсинг не удался, отправляем как текст с ошибкой
         res.status(500).json({ error: 'AI response was not valid JSON', raw_response: botResponseText });
     }
 
@@ -129,10 +126,9 @@ app.post('/generate-dictionaries', async (req, res) => {
   }
 });
 
-// Сохраняем старый эндпоинт для обратной совместимости, если он нужен
+// Старый эндпоинт, который возвращал ошибку
 app.post('/generate', async (req, res) => {
-    // ... логика вашего старого эндпоинта ...
-    res.status(501).json({ error: 'This endpoint is deprecated.' });
+    res.status(501).json({ error: 'This endpoint is deprecated. Please use /generate-dictionaries' });
 });
 
 
