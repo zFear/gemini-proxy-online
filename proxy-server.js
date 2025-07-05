@@ -95,10 +95,9 @@ app.post('/generate-dictionaries', async (req, res) => {
 
     const result = await model.generateContent(userPrompt);
     const response = await result.response;
-
     let botResponseText = response.text();
 
-    // Удаляем Markdown-обёртку, если она есть
+    // Удаляем Markdown обёртку (на всякий случай)
     if (typeof botResponseText === 'string') {
       botResponseText = botResponseText
         .replace(/^```(?:json)?\s*/i, '')
@@ -113,36 +112,16 @@ app.post('/generate-dictionaries', async (req, res) => {
         range: 'A1',
         valueInputOption: 'USER_ENTERED',
         resource: {
-          values: [[sessionId, userPrompt, typeof botResponseText === 'string' ? botResponseText : JSON.stringify(botResponseText)]],
+          values: [[sessionId, userPrompt, botResponseText]],
         },
       });
     } catch (err) {
       console.error('Error writing to Google Sheets:', err.message);
     }
 
-    // Универсальный разбор: строка → JSON.parse, объект → сразу отдаём
-    let parsedResponse;
-
-    if (typeof botResponseText === 'string') {
-      try {
-        parsedResponse = JSON.parse(botResponseText);
-      } catch (e) {
-        console.error("Failed to parse Gemini response as JSON:", botResponseText);
-        return res.status(500).json({
-          error: 'AI response was not valid JSON',
-          raw_response: botResponseText,
-        });
-      }
-    } else if (typeof botResponseText === 'object') {
-      parsedResponse = botResponseText;
-    } else {
-      return res.status(500).json({
-        error: 'Unexpected response type from Gemini',
-        type: typeof botResponseText,
-      });
-    }
-
-    return res.json(parsedResponse);
+    // Просто отправляем текст обратно
+    res.setHeader('Content-Type', 'application/json');
+    res.send(botResponseText);
 
   } catch (error) {
     console.error("Error in /generate-dictionaries endpoint:", error);
