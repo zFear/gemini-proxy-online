@@ -99,8 +99,8 @@ app.post('/generate-dictionaries', async (req, res) => {
 
     // 🧼 Удаляем Markdown-обрамление
     botResponseText = botResponseText
-      .replace(/^```json\s*/i, '')
-      .replace(/```$/, '')
+      .replace(/^```(?:json)?\s*/i, '')  // удаляет начало ``` или ```json
+      .replace(/\s*```$/i, '')          // удаляет конец ```
       .trim();
 
     try {
