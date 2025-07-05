@@ -64,8 +64,6 @@ app.post('/generate-dictionaries', async (req, res) => {
       return res.status(400).json({ error: 'URL сайта компании и Session ID обязательны' });
     }
 
-    // --- ШАГ 1: Подготовка данных для Gemini ---
-    // Функция для преобразования URL в формат, понятный Gemini
     const urlToFilePart = (uri) => ({
         fileData: {
             mimeType: "text/html",
@@ -73,25 +71,21 @@ app.post('/generate-dictionaries', async (req, res) => {
         }
     });
 
-    // Собираем все URL в один массив
     const urlsToProcess = [my_site_url, ...(competitor_urls || [])]
-      .filter(url => url && url.trim() !== '') // Убираем пустые URL
+      .filter(url => url && url.trim() !== '')
       .map(url => urlToFilePart(url.trim()));
 
-    // --- ШАГ 2: Формирование запроса к модели ---
     const userPrompt = `
       Проанализируй предоставленные веб-страницы и создай для них словари.
       Первый URL в списке - это сайт моей компании, остальные - сайты конкурентов.
     `;
     
-    // Собираем запрос: сначала текстовая инструкция, затем массив файлов
     const requestPayload = [userPrompt, ...urlsToProcess];
 
     const result = await model.generateContent(requestPayload);
     const response = await result.response;
     const botResponseText = response.text();
 
-    // --- ШАГ 3: Запись в Google Sheets и отправка ответа (без изменений) ---
     try {
         await sheets.spreadsheets.values.append({
             spreadsheetId, range: 'A1', valueInputOption: 'USER_ENTERED',
@@ -102,7 +96,11 @@ app.post('/generate-dictionaries', async (req, res) => {
     }
     
     try {
-        const parsedResponse = JSON.parse(botResponseText);
+        // --- ИСПРАВЛЕНИЕ: Очищаем ответ от Markdown-блоков ---
+        // Удаляем начальный ```json и конечный ```
+        const cleanedText = botResponseText.replace(/^```json\s*/, '').replace(/```$/, '');
+        
+        const parsedResponse = JSON.parse(cleanedText);
         res.json(parsedResponse);
     } catch (parseError) {
         console.error("Failed to parse Gemini response as JSON:", botResponseText);
