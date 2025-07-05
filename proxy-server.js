@@ -103,6 +103,14 @@ app.post('/generate-dictionaries', async (req, res) => {
       .replace(/\s*```$/i, '')          // удаляет конец ```
       .trim();
 
+    // Обеспечиваем, что это строка
+    if (typeof botResponseText !== 'string') {
+      botResponseText = JSON.stringify(botResponseText);
+    }
+
+
+
+    
     try {
         await sheets.spreadsheets.values.append({
             spreadsheetId,
