@@ -1,5 +1,5 @@
 const express = require('express');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
 const cors = require('cors');
 const { google } = require('googleapis');
 
@@ -23,44 +23,22 @@ const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
 // --- СИСТЕМНЫЙ ПРОМПТ ДЛЯ АНАЛИЗА САЙТОВ (без изменений) ---
 const systemPrompt = `
 Ты — AI-аналитик, специализирующийся на бизнес-анализе и семантическом ядре для строительной отрасли.
-Твоя задача — на основе предоставленных URL-адресов провести глубокий анализ сайтов компании и ее конкурентов, чтобы создать набор словарей для системы речевой аналитики.
+Твоя задача — на основе предоставленных веб-страниц провести глубокий анализ сайтов компании и ее конкурентов, чтобы создать набор словарей для системы речевой аналитики.
 
 **Твой алгоритм действий:**
-1.  **Изучи сайт компании:** Перейди по URL сайта компании, проанализируй его контент, чтобы точно определить основные услуги, специфическую терминологию и целевую аудиторию.
-2.  **Изучи сайты конкурентов:** Перейди по URL сайтов конкурентов, чтобы определить их названия и сравнить их услуги с услугами основной компании.
+1.  **Изучи сайт компании:** Проанализируй контент предоставленной веб-страницы компании, чтобы точно определить основные услуги, специфическую терминологию и целевую аудиторию.
+2.  **Изучи сайты конкурентов:** Проанализируй контент предоставленных веб-страниц конкурентов, чтобы определить их названия и сравнить их услуги с услугами основной компании.
 3.  **Сгенерируй словари:** На основе всего комплексного анализа, сгенерируй **ТОЛЬКО один валидный JSON-объект** со следующей структурой. Не добавляй никаких комментариев, объяснений или обрамления \`\`\`json.
 
 **Структура JSON:**
 {
   "dictionaries": [
-    {
-      "title": "Наши Услуги",
-      "description": "Ключевые услуги, которые предлагает компания.",
-      "terms": ["список из 5-10 ключевых услуг, найденных на сайте компании"]
-    },
-    {
-      "title": "Конкуренты",
-      "description": "Названия компаний-конкурентов, найденные на сайтах.",
-      "terms": ["список названий конкурентов"]
-    },
-    {
-      "title": "Технические Термины",
-      "description": "Специфическая отраслевая лексика и термины.",
-      "terms": ["список из 10-15 важных технических терминов, найденных на всех сайтах"]
-    },
-    {
-      "title": "Причины Обращения (Проблемы)",
-      "description": "Фразы, описывающие, зачем клиенты могут звонить.",
-      "terms": ["список фраз, например 'рассчитать стоимость', 'получить консультацию', 'снять замечания'"]
-    }
+    { "title": "Наши Услуги", "description": "Ключевые услуги, которые предлагает компания.", "terms": ["список из 5-10 ключевых услуг"] },
+    { "title": "Конкуренты", "description": "Названия компаний-конкурентов.", "terms": ["список названий конкурентов"] },
+    { "title": "Технические Термины", "description": "Специфическая отраслевая лексика.", "terms": ["список из 10-15 важных технических терминов"] },
+    { "title": "Причины Обращения (Проблемы)", "description": "Фразы, описывающие, зачем клиенты могут звонить.", "terms": ["список фраз, например 'рассчитать стоимость', 'получить консультацию'"] }
   ]
 }
-
-**Инструкции по заполнению:**
-- Внимательно проанализируй все предоставленные сайты.
-- Извлеки из них информацию для заполнения словарей "Наши Услуги", "Конкуренты", "Технические Термины".
-- На основе общего понимания тематики бизнеса и анализа контента, предположи, с какими проблемами и вопросами могут обращаться клиенты, и заполни словарь "Причины Обращения".
-- Включи в словари только самые важные и часто встречающиеся термины. Ответ должен быть строго в формате JSON.
 `;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -69,16 +47,15 @@ const generationConfig = {
     temperature: 0.1,
 };
 
-// --- ИНИЦИАЛИЗАЦИЯ МОДЕЛИ С ИНСТРУМЕНТАМИ ---
+// --- ИНИЦИАЛИЗАЦИЯ МОДЕЛИ ---
 const model = genAI.getGenerativeModel({
     model: "gemini-1.5-pro-latest",
     systemInstruction: systemPrompt,
     generationConfig: generationConfig,
-    // ИСПРАВЛЕНО: googleSearch заменен на google_search_retrieval согласно сообщению об ошибке.
-    tools: [{ "google_search_retrieval": {} }], 
 });
 
 
+// --- НОВЫЙ ОБРАБОТЧИК С АНАЛИЗОМ URL ---
 app.post('/generate-dictionaries', async (req, res) => {
   try {
     const { my_site_url, competitor_urls, sessionId } = req.body;
@@ -87,24 +64,38 @@ app.post('/generate-dictionaries', async (req, res) => {
       return res.status(400).json({ error: 'URL сайта компании и Session ID обязательны' });
     }
 
-    const userPrompt = `
-      Проанализируй следующие сайты и создай для них словари.
-      - Сайт моей компании: ${my_site_url}
-      - Сайты конкурентов: ${(competitor_urls || []).join(', ')}
-    `;
+    // --- ШАГ 1: Подготовка данных для Gemini ---
+    // Функция для преобразования URL в формат, понятный Gemini
+    const urlToFilePart = (uri) => ({
+        fileData: {
+            mimeType: "text/html",
+            fileUri: uri
+        }
+    });
 
-    const result = await model.generateContent(userPrompt);
+    // Собираем все URL в один массив
+    const urlsToProcess = [my_site_url, ...(competitor_urls || [])]
+      .filter(url => url && url.trim() !== '') // Убираем пустые URL
+      .map(url => urlToFilePart(url.trim()));
+
+    // --- ШАГ 2: Формирование запроса к модели ---
+    const userPrompt = `
+      Проанализируй предоставленные веб-страницы и создай для них словари.
+      Первый URL в списке - это сайт моей компании, остальные - сайты конкурентов.
+    `;
+    
+    // Собираем запрос: сначала текстовая инструкция, затем массив файлов
+    const requestPayload = [userPrompt, ...urlsToProcess];
+
+    const result = await model.generateContent(requestPayload);
     const response = await result.response;
     const botResponseText = response.text();
 
+    // --- ШАГ 3: Запись в Google Sheets и отправка ответа (без изменений) ---
     try {
         await sheets.spreadsheets.values.append({
-            spreadsheetId,
-            range: 'A1',
-            valueInputOption: 'USER_ENTERED',
-            resource: {
-                values: [[sessionId, userPrompt, botResponseText]],
-            },
+            spreadsheetId, range: 'A1', valueInputOption: 'USER_ENTERED',
+            resource: { values: [[sessionId, userPrompt, botResponseText]] },
         });
     } catch (err) {
         console.error('Error writing to Google Sheets:', err.message);
@@ -126,10 +117,11 @@ app.post('/generate-dictionaries', async (req, res) => {
   }
 });
 
-// Старый эндпоинт, который возвращал ошибку
+// Старый эндпоинт для обратной совместимости
 app.post('/generate', async (req, res) => {
     res.status(501).json({ error: 'This endpoint is deprecated. Please use /generate-dictionaries' });
 });
 
 
 module.exports = app;
+
